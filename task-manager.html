@@ -184,6 +184,15 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .timing-tab.sel-morning{background:rgba(251,191,36,.12);border-color:#fbbf24;color:#fbbf24}
 .timing-tab.sel-night{background:rgba(129,140,248,.12);border-color:#818cf8;color:#818cf8}
 .timing-tab.sel-allday{background:rgba(52,211,153,.12);border-color:#34d399;color:#34d399}
+/* DIARY */
+.diary-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:8px}
+.diary-card-header{display:flex;align-items:center;gap:8px;padding:9px 13px;border-bottom:1px solid var(--border);background:rgba(129,140,248,.04)}
+.diary-card-title{font-size:10px;font-weight:700;color:var(--accent2);letter-spacing:.8px;text-transform:uppercase;flex:1}
+.diary-char-count{font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text3)}
+.diary-textarea{width:100%;background:none;border:none;padding:12px 14px;color:var(--text);font-size:13px;font-family:'Noto Sans JP',sans-serif;outline:none;resize:none;line-height:1.7;min-height:110px}
+.diary-textarea::placeholder{color:var(--text3)}
+.diary-textarea:focus{background:rgba(129,140,248,.02)}
+/* TIMELOG */
 .tl-page-wrap{display:flex;flex-direction:column;gap:8px}
 .tl-gantt-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .tl-gantt-header{display:flex;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border);gap:6px}
@@ -605,6 +614,15 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
       <button class="sec-action" onclick="saveTimelog()">💾 保存</button>
     </div>
     <div class="tl-page-wrap">
+      <!-- DIARY -->
+      <div class="diary-card">
+        <div class="diary-card-header">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          <span class="diary-card-title">日記</span>
+          <span class="diary-char-count" id="diary-char-count">0文字</span>
+        </div>
+        <textarea class="diary-textarea" id="diary-input" placeholder="今日の出来事、気づき、感想など..." oninput="diaryInput()"></textarea>
+      </div>
       <!-- GANTT CHART -->
       <div class="tl-gantt-card">
         <div class="tl-gantt-header">
@@ -834,10 +852,12 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 <div class="toast" id="toast"></div>
 
 <script>
-let state = { tasks:[], habits:[], habitLogs:{}, timelogs:{}, shifts:{}, sales:{} };
+let state = { tasks:[], habits:[], habitLogs:{}, timelogs:{}, shifts:{}, sales:{}, diaries:{} };
 let currentDate = new Date();
 let editingTaskId = null;
 let currentFilter = 'all';
+let salesNavDate = new Date();
+let salesInputDate = new Date();
 const DAYS = ['日','月','火','水','木','金','土'];
 
 const dk = d => {
@@ -1297,8 +1317,31 @@ function deleteHabit(id) {
   saveState(); renderHabits();
 }
 
-// TIMELOG
-const GANTT_START = 0;   // 0時から
+// DIARY
+function diaryInput() {
+  const el = document.getElementById('diary-input');
+  const cc = document.getElementById('diary-char-count');
+  if(cc) cc.textContent = el.value.length + '文字';
+}
+function loadDiary() {
+  const dKey = dk(currentDate);
+  const el = document.getElementById('diary-input');
+  const cc = document.getElementById('diary-char-count');
+  if(!el) return;
+  const text = (state.diaries && state.diaries[dKey]) || '';
+  el.value = text;
+  if(cc) cc.textContent = text.length + '文字';
+}
+function saveDiary() {
+  const dKey = dk(currentDate);
+  const el = document.getElementById('diary-input');
+  if(!el) return;
+  if(!state.diaries) state.diaries = {};
+  const text = el.value.trim();
+  if(text) state.diaries[dKey] = text;
+  else delete state.diaries[dKey];
+}
+const GANTT_START = 0;    // 0時から
 const GANTT_END   = 24;  // 24時まで
 const GANTT_RANGE = GANTT_END - GANTT_START; // 24時間
 
@@ -1312,6 +1355,7 @@ function timeToFrac(timeStr) {
 function renderTimelog() {
   renderGantt();
   renderLogInputs();
+  loadDiary();
 }
 
 function renderGantt() {
@@ -1431,7 +1475,9 @@ function renderLogInputs() {
 function saveTimelog() {
   const dKey=dk(currentDate); const log={};
   for(let h=0;h<=23;h++) { const hh=String(h).padStart(2,'0'); const el=document.getElementById('tl-'+hh); if(el&&el.value.trim()) log[hh]=el.value.trim(); }
-  state.timelogs[dKey]=log; saveState(); renderTimelineStrip(); renderGantt();
+  state.timelogs[dKey]=log;
+  saveDiary();
+  saveState(); renderTimelineStrip(); renderGantt();
   showToast('保存しました ✓','ok');
 }
 
@@ -1466,8 +1512,6 @@ function importData(e) {
 
 // ===== SALES =====
 // state.sales = { "YYYY-MM-DD": { free:number, client:number, cash:number } }
-let salesNavDate = new Date();   // currently viewed month
-let salesInputDate = new Date(); // date shown in input form
 
 const yen = v => '¥' + Number(v||0).toLocaleString('ja-JP');
 const salesKey = d => dk(d);
@@ -1708,8 +1752,9 @@ function loadState() {
       const d=JSON.parse(s);
       if(d.tasks){
         state=d;
-        if(!state.sales)  state.sales={};
-        if(!state.shifts) state.shifts={};
+        if(!state.sales)   state.sales={};
+        if(!state.shifts)  state.shifts={};
+        if(!state.diaries) state.diaries={};
         // migrate habits: add timing/order if missing
         state.habits.forEach((h,i)=>{
           if(!h.timing) h.timing='morning';
@@ -1970,7 +2015,7 @@ function renderMonthCell(dd, dds, selStr, todayStr, otherMonth) {
   document.getElementById('cal-dow').style.display = 'none';
 })();
 
-loadState(); updateHeader(); renderTasks(); renderHabits(); renderTimelog(); renderTimelineStrip(); renderShift(); salesNavDate=new Date(); salesInputDate=new Date();
+loadState(); updateHeader(); renderTasks(); renderHabits(); renderTimelog(); renderTimelineStrip(); renderShift();
 </script>
 </body>
 </html>
